@@ -17,11 +17,7 @@ class LokiApiAppender extends BaseDioLogSender {
     @required this.username,
     @required this.password,
     @required this.labels,
-  })  : labelsString = '{' +
-            labels.entries
-                .map((entry) => '${entry.key}="${entry.value}"')
-                .join(',') +
-            '}',
+  })  : _labelString = _labelsToString(labels),
         authHeader = 'Basic ' +
             base64
                 .encode(utf8.encode([username, password].join(':')))
@@ -32,7 +28,25 @@ class LokiApiAppender extends BaseDioLogSender {
   final String password;
   final String authHeader;
   final Map<String, String> labels;
-  final String labelsString;
+
+  String _labelString;
+  String get labelString => _labelString;
+
+  static String _labelsToString(Map labels) {
+    return '{' +
+        labels.entries
+            .map((entry) => '${entry.key}="${entry.value}"')
+            .join(',') +
+        '}';
+  }
+
+  /// Updates the labels map with additional/updated labels.
+  ///
+  /// It is an additive operation. Labels existing in the map will not be removed.
+  void updateLabels(Map<String, String> newLabels) {
+    labels.addEntries(newLabels.entries);
+    _labelString = _labelsToString(labels);
+  }
 
   static String _encodeLineLabelValue(String value) {
     if (value.contains(' ')) {
@@ -45,7 +59,7 @@ class LokiApiAppender extends BaseDioLogSender {
   Future<void> sendLogEventsWithHttpClient(
       List<LogEntry> entries, Map<String, String> userProperties) {
     final jsonObject =
-        LokiPushBody([LokiStream(labelsString, entries)]).toJson();
+        LokiPushBody([LokiStream(labelString, entries)]).toJson();
     final jsonBody = json.encode(jsonObject, toEncodable: (dynamic obj) {
       if (obj is LogEntry) {
         final mapObj = {
@@ -61,7 +75,7 @@ class LokiApiAppender extends BaseDioLogSender {
       }
       return obj.toJson();
     });
-    var jsonBodyBytes = utf8.encode(jsonBody);
+    final jsonBodyBytes = utf8.encode(jsonBody);
 
     return http.post(
       'https://$server/api/prom/push',
