@@ -140,6 +140,8 @@ typedef SimpleJobRunner = Stream<void> Function(SimpleJobDef job);
 class SimpleJobDef {
   SimpleJobDef({@required this.runner});
 
+  bool completedSuccessfully = false;
+
   final SimpleJobRunner runner;
 }
 
@@ -169,13 +171,15 @@ class SimpleJobQueue {
     var successfulJobs = 0;
 //    final job = _queue.removeFirst();
     _currentStream = (() async* {
-      for (final job in _queue) {
+      for (final job
+          in _queue.where((job) => job.completedSuccessfully == false)) {
         await job.runner(job).drain(null);
         yield job;
       }
     })()
         .listen((successJob) {
-      _queue.remove(successJob);
+      successJob.completedSuccessfully = true;
+
       successfulJobs++;
       _logger.finest(
           'Success job. remaining: ${_queue.length} - completed: $successfulJobs');
@@ -183,7 +187,7 @@ class SimpleJobQueue {
       _logger.finest('All jobs done.');
       _errorCount = 0;
       _lastError = null;
-
+      _queue.removeWhere((job) => job.completedSuccessfully == true);
       _currentStream = null;
       completer.complete(successfulJobs);
     }, onError: (dynamic error, StackTrace stackTrace) {
