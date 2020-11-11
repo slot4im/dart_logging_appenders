@@ -1,5 +1,3 @@
-import 'package:io/ansi.dart' as ansi;
-import 'package:io/ansi.dart';
 import 'package:logging/logging.dart';
 
 /// Base class for formatters which are responsible for converting
@@ -54,55 +52,4 @@ class DefaultLogRecordFormatter extends LogRecordFormatter {
     }
     return sb;
   }
-}
-
-/// dart:io logger which adds ansi escape characters to set the color
-/// of the output depending on log level.
-class ColorFormatter extends LogRecordFormatter {
-  const ColorFormatter(
-      [this.wrappedFormatter = const DefaultLogRecordFormatter()]);
-
-  final LogRecordFormatter wrappedFormatter;
-  static final Map<Level, _AnsiCombination> _colorCache = {};
-
-  @override
-  StringBuffer formatToStringBuffer(LogRecord rec, StringBuffer sb) {
-    final color =
-        _colorCache.putIfAbsent(rec.level, () => _colorForLevel(rec.level));
-    if (color != null) {
-      sb.write(color.escape);
-      wrappedFormatter.formatToStringBuffer(rec, sb);
-      sb.write(color.resetEscape);
-    } else {
-      wrappedFormatter.formatToStringBuffer(rec, sb);
-    }
-    return sb;
-  }
-
-  _AnsiCombination _colorForLevel(Level level) {
-    if (level <= Level.FINE) {
-      return _AnsiCombination.combine([ansi.styleDim, ansi.lightGray]);
-    }
-    if (level <= Level.INFO) {
-      return null;
-    }
-    if (level <= Level.WARNING) {
-      return _AnsiCombination.combine([ansi.magenta]);
-    }
-    if (level <= Level.SEVERE) {
-      return _AnsiCombination.combine([ansi.red]);
-    }
-    return _AnsiCombination.combine([ansi.red, ansi.styleBold]);
-  }
-}
-
-class _AnsiCombination {
-  _AnsiCombination._(this.escape, this.resetEscape);
-
-  _AnsiCombination.combine(List<AnsiCode> codes)
-      : this._(codes.map((code) => code.escape).join(),
-            codes.map((code) => code.reset?.escape).join());
-
-  final String escape;
-  final String resetEscape;
 }

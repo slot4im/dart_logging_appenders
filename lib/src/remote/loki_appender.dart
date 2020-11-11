@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
-import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+
 import 'package:logging_appenders/src/internal/dummy_logger.dart';
 import 'package:logging_appenders/src/remote/base_remote_appender.dart';
 import 'package:meta/meta.dart';
@@ -34,13 +34,6 @@ class LokiApiAppender extends BaseDioLogSender {
   final Map<String, String> labels;
   final String labelsString;
 
-  static final DateFormat _dateFormat =
-      DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-
-  Dio _clientInstance;
-
-  Dio get _client => _clientInstance ??= Dio();
-
   static String _encodeLineLabelValue(String value) {
     if (value.contains(' ')) {
       return json.encode(value);
@@ -49,14 +42,14 @@ class LokiApiAppender extends BaseDioLogSender {
   }
 
   @override
-  Future<void> sendLogEventsWithDio(List<LogEntry> entries,
-      Map<String, String> userProperties, CancelToken cancelToken) {
+  Future<void> sendLogEventsWithHttpClient(
+      List<LogEntry> entries, Map<String, String> userProperties) {
     final jsonObject =
         LokiPushBody([LokiStream(labelsString, entries)]).toJson();
     final jsonBody = json.encode(jsonObject, toEncodable: (dynamic obj) {
       if (obj is LogEntry) {
-        return {
-          'ts': _dateFormat.format(obj.ts.toUtc()),
+        final mapObj = {
+          'ts': obj.ts.toUtc().toIso8601String(),
           'line': obj.lineLabels.entries
                   .map((entry) =>
                       '${entry.key}=${_encodeLineLabelValue(entry.value)}')
@@ -64,36 +57,34 @@ class LokiApiAppender extends BaseDioLogSender {
               ' - ' +
               obj.line
         };
+        return mapObj;
       }
       return obj.toJson();
     });
-    return _client
-        .post<dynamic>(
-          'https://$server/api/prom/push',
-          cancelToken: cancelToken,
-          data: jsonBody,
-          options: Options(
-            headers: <String, String>{
-              HttpHeaders.authorizationHeader: authHeader,
-            },
-            contentType: ContentType(
-                    ContentType.json.primaryType, ContentType.json.subType)
-                .value,
-          ),
-        )
-        .then(
-          (response) => null,
-//      _logger.finest('sent logs.');
-        )
-        .catchError((dynamic err, StackTrace stackTrace) {
-      String message;
-      if (err is DioError) {
-        if (err.response != null) {
-          message = 'response:' + err.response.data?.toString();
-        }
+    var jsonBodyBytes = utf8.encode(jsonBody);
+
+    return http.post(
+      'https://$server/api/prom/push',
+      // 'https://$server',
+      body: jsonBodyBytes, //jsonBody,
+      headers: <String, String>{
+        HttpHeaders.authorizationHeader: authHeader,
+        HttpHeaders.contentLengthHeader: jsonBodyBytes.length.toString(),
+        HttpHeaders.contentTypeHeader:
+            ContentType(ContentType.json.primaryType, ContentType.json.subType)
+                .value
+      },
+    ).then((response) {
+      if (!response.statusCode.toString().startsWith('2')) {
+        _logger.warning(
+            'log sender response status was not a 200. ${response.statusCode}: ${response.reasonPhrase}');
+      } else {
+        _logger.finest('sucessfully sent logs.');
       }
+      return null;
+    }).catchError((Object err, StackTrace stackTrace) {
       _logger.warning(
-          'Error while sending logs to loki. $message', err, stackTrace);
+          'Error while sending logs to loki. ${err.toString()}, ${stackTrace.toString()}');
       return Future<void>.error(err, stackTrace);
     });
   }

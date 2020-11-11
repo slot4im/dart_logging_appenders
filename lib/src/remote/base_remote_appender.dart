@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:dio/dio.dart';
-import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:logging_appenders/src/base_appender.dart';
@@ -96,34 +94,30 @@ abstract class BaseDioLogSender extends BaseLogSender {
     int bufferSize,
   }) : super(formatter: formatter, bufferSize: bufferSize);
 
-  Future<void> sendLogEventsWithDio(List<LogEntry> entries,
-      Map<String, String> userProperties, CancelToken cancelToken);
+  Future<void> sendLogEventsWithHttpClient(
+      List<LogEntry> entries, Map<String, String> userProperties);
 
   @override
   Stream<void> sendLogEvents(
       List<LogEntry> logEntries, Map<String, String> userProperties) {
-    final cancelToken = CancelToken();
-    final streamController = StreamController<void>(onCancel: () {
-      cancelToken.cancel();
-    });
+    final streamController = StreamController<void>();
+    streamController.onCancel = () {};
     streamController.onListen = () {
-      sendLogEventsWithDio(logEntries, userProperties, cancelToken).then((val) {
+      sendLogEventsWithHttpClient(logEntries, userProperties).then((val) {
         if (!streamController.isClosed) {
           streamController.add(null);
           streamController.close();
         }
       }).catchError((dynamic err, StackTrace stackTrace) {
         var message = err.runtimeType.toString();
-        if (err is DioError) {
-          if (err.response != null) {
-            message = 'response:' + err.response.data?.toString();
-          }
-          _logger.warning(
-              'Error while sending logs. $message', err, stackTrace);
-          if (!streamController.isClosed) {
-            streamController.addError(err, stackTrace);
-            streamController.close();
-          }
+
+        if (err.response != null) {
+          message = 'response:' + err.response.data?.toString();
+        }
+        _logger.warning('Error while sending logs. $message', err, stackTrace);
+        if (!streamController.isClosed) {
+          streamController.addError(err, stackTrace);
+          streamController.close();
         }
       });
     };
@@ -134,13 +128,11 @@ abstract class BaseDioLogSender extends BaseLogSender {
 class LogEntry {
   LogEntry({@required this.ts, @required this.line, @required this.lineLabels});
 
-  static final DateFormat _dateFormat =
-      DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
   final DateTime ts;
   final String line;
   final Map<String, String> lineLabels;
 
-  String get tsFormatted => _dateFormat.format(ts.toUtc());
+  String get tsFormatted => ts.toUtc().toIso8601String();
 }
 
 typedef SimpleJobRunner = Stream<void> Function(SimpleJobDef job);
