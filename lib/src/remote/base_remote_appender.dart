@@ -108,13 +108,14 @@ abstract class BaseDioLogSender extends BaseLogSender {
           streamController.add(null);
           streamController.close();
         }
-      }).catchError((dynamic err, StackTrace stackTrace) {
-        var message = err.runtimeType.toString();
+      }).catchError((Object err, StackTrace stackTrace) {
+        // var message = err.runtimeType.toString();
 
-        if (err.response != null) {
-          message = 'response:' + err.response.data?.toString();
-        }
-        _logger.warning('Error while sending logs. $message', err, stackTrace);
+        // if (err.response != null) {
+        //   message = 'response:' + err.response.data?.toString();
+        // }
+        _logger.warning(
+            'Error while sending logs. ${err.runtimeType}', err, stackTrace);
         if (!streamController.isClosed) {
           streamController.addError(err, stackTrace);
           streamController.close();
