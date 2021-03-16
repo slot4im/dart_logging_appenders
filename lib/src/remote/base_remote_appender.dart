@@ -87,9 +87,9 @@ abstract class BaseLogSender extends BaseLogAppender {
   Future<void> flush() => _triggerSendLogEvents();
 }
 
-/// Helper base class to handle Dio errors during network requests.
-abstract class BaseDioLogSender extends BaseLogSender {
-  BaseDioLogSender({
+/// Helper base class to handle Http errors during network requests.
+abstract class BaseHttpLogSender extends BaseLogSender {
+  BaseHttpLogSender({
     LogRecordFormatter formatter,
     int bufferSize,
   }) : super(formatter: formatter, bufferSize: bufferSize);
