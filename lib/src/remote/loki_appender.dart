@@ -17,7 +17,10 @@ class LokiApiAppender extends BaseHttpLogSender {
     @required this.username,
     @required this.password,
     @required this.labels,
-  })  : _labelString = _labelsToString(labels),
+  })  : assert(username.isNotEmpty),
+        assert(password.isNotEmpty),
+        assert(server.isNotEmpty),
+        _labelString = _labelsToString(labels),
         authHeader = 'Basic ' +
             base64
                 .encode(utf8.encode([username, password].join(':')))
