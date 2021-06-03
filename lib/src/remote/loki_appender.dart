@@ -10,7 +10,12 @@ import 'package:meta/meta.dart';
 
 final _logger = DummyLogger('logging_appenders.loki_appender');
 
+// Set the dummy logger to print everything when debuggin:
+// _logger.level = Level.FINEST;
+
 /// Appender used to push logs to [Loki](https://github.com/grafana/loki).
+///
+/// Server url must conform for new `api/v1/push` format.
 class LokiApiAppender extends BaseHttpLogSender {
   LokiApiAppender({
     @required this.server,
@@ -61,28 +66,27 @@ class LokiApiAppender extends BaseHttpLogSender {
   @override
   Future<void> sendLogEventsWithHttpClient(
       List<LogEntry> entries, Map<String, String> userProperties) {
-    final jsonObject =
-        LokiPushBody([LokiStream(labelString, entries)]).toJson();
+    final jsonObject = LokiPushBody([LokiStream(labels, entries)]).toJson();
     final jsonBody = json.encode(jsonObject, toEncodable: (dynamic obj) {
       if (obj is LogEntry) {
-        final mapObj = {
-          'ts': obj.ts.toUtc().toIso8601String(),
-          'line': obj.lineLabels.entries
+        final entry = [
+          (obj.ts.microsecondsSinceEpoch * 1000)
+              .toString(), // conv to nanoseconds
+          obj.lineLabels.entries
                   .map((entry) =>
                       '${entry.key}=${_encodeLineLabelValue(entry.value)}')
                   .join(' ') +
               ' - ' +
               obj.line
-        };
-        return mapObj;
+        ];
+        return entry;
       }
       return obj.toJson();
     });
     final jsonBodyBytes = utf8.encode(jsonBody);
-
+    _logger.finest('About to push logs: ${jsonBodyBytes.length} bytes');
     return http.post(
-      'https://$server/api/prom/push',
-      // 'https://$server',
+      server,
       body: jsonBodyBytes, //jsonBody,
       headers: <String, String>{
         HttpHeaders.authorizationHeader: authHeader,
@@ -93,15 +97,17 @@ class LokiApiAppender extends BaseHttpLogSender {
       },
     ).then((response) {
       if (!response.statusCode.toString().startsWith('2')) {
-        _logger.warning(
-            'log sender response status was not a 200. ${response.statusCode}: ${response.reasonPhrase}');
+        final msg =
+            'log sender response status was not a 200. ${response.statusCode}: ${response.reasonPhrase}';
+        _logger.warning(msg);
+        return Future<void>.error(Exception(msg));
       } else {
         _logger.finest('sucessfully sent logs.');
       }
       return null;
     }).catchError((Object err, StackTrace stackTrace) {
       _logger.warning(
-          'Error while sending logs to loki. ${err.toString()}, ${stackTrace.toString()}');
+          'Error while sending logs to loki. ${err?.toString()}, ${stackTrace?.toString()}');
       return Future<void>.error(err, stackTrace);
     });
   }
@@ -118,12 +124,31 @@ class LokiPushBody {
       };
 }
 
+/// Loki stream definition
+///
+/// For api v1 must take the below form when serializing to json:
+/// ```json
+///   {
+///      "stream": {
+///        "label": "value"
+///      },
+///      "values": [
+///        [
+///          "<unix epoch in nanoseconds>",
+///          "<log line>"
+///        ],
+///        [
+///          "<unix epoch in nanoseconds>",
+///          "<log line>"
+///        ]
+///      ]
+///    }
 class LokiStream {
   LokiStream(this.labels, this.entries);
 
-  final String labels;
+  final Map<String, String> labels;
   final List<LogEntry> entries;
 
   Map<String, dynamic> toJson() =>
-      <String, dynamic>{'labels': labels, 'entries': entries};
+      <String, dynamic>{'stream': labels, 'values': entries};
 }
