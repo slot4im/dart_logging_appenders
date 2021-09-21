@@ -86,7 +86,7 @@ class LokiApiAppender extends BaseHttpLogSender {
     final jsonBodyBytes = utf8.encode(jsonBody);
     _logger.finest('About to push logs: ${jsonBodyBytes.length} bytes');
     return http.post(
-      server,
+      Uri.parse(server),
       body: jsonBodyBytes, //jsonBody,
       headers: <String, String>{
         HttpHeaders.authorizationHeader: authHeader,
