@@ -25,7 +25,6 @@
 
 #### project specific ignores below
 
-
 .DS_Store
 .dart_tool/
 
@@ -49,3 +48,6 @@ ios/Runner/GeneratedPluginRegistrant.*
 /.editorconfig
 
 /doc/api
+
+# FVM Version Cache
+.fvm/
